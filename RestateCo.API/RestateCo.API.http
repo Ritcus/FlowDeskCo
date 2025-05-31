@@ -1,0 +1,6 @@
+@RestateCo.API_HostAddress = http://localhost:5118
+
+GET {{RestateCo.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
