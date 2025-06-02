@@ -14,4 +14,8 @@
     <ProjectReference Include="..\FlowDeskCo.Domain\FlowDeskCo.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Services\" />
+  </ItemGroup>
+
 </Project>

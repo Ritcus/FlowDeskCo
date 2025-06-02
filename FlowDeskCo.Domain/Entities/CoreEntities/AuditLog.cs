@@ -10,6 +10,7 @@ namespace RestateCo.Domain.Entities.CoreEntities
     {
         public Guid Id { get; set; }
         public string? Action { get; set; }
+        public Guid? ClientId { get; set; }
         public string? PerformedBy { get; set; }
         public string? EntityType { get; set; }
         public Guid? EntityId { get; set; }

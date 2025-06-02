@@ -10,6 +10,7 @@ namespace RestateCo.Domain.Entities.CoreEntities
     {
         public Guid Id { get; set; }
         public string? Recipient { get; set; }
+        public Guid? ClientId { get; set; }
         public string? MessageType { get; set; } // Email or SMS
         public string? MessageContent { get; set; }
         public DateTime SentAt { get; set; }
