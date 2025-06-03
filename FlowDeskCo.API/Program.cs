@@ -1,4 +1,5 @@
 using FlowDeskCo.Application.Interfaces;
+using FlowDeskCo.Application.Middlerwares;
 using FlowDeskCo.Infrastructure.Persistence;
 using FlowDeskCo.Infrastructure.Repositories;
 using FlowDeskCo.Infrastructure.Services;
@@ -8,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using RestateCo.Domain.Entities.CoreEntities;
+using System.Data;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -42,35 +44,7 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddDbContext<AppDbContext>((sp, options) => {
 
     var tenantProvider = sp.GetRequiredService<ITenantProvider>();
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
-    .UseSeeding((context, _) =>
-    {
-        if (!context.Set<Role>().Any())
-        {
-            context.Set<Role>().AddRange(DbSeedData.roles);
-        }
-        if (!context.Set<Client>().Any())
-        {
-            context.Set<Client>().AddRange(DbSeedData.clients);
-        }
-        if (!context.Set<User>().Any())
-        {
-            context.Set<User>().AddRange(DbSeedData.users);
-        }
-        if (!context.Set<Document>().Any())
-        {
-            context.Set<Document>().AddRange(DbSeedData.documents);
-        }
-        if (!context.Set<SharedLink>().Any())
-        {
-            context.Set<SharedLink>().AddRange(DbSeedData.sharedLinks);
-        }
-        if (!context.Set<SharedLink>().Any())
-        {
-            context.Set<SharedLink>().AddRange(DbSeedData.sharedLinks);
-        }
-        context.SaveChanges();
-    });
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
     });
 
 
@@ -98,6 +72,8 @@ builder.Services.AddAuthentication(opt =>
 });
 
 builder.Services.AddScoped<JwtTokenService>();
+builder.Services.AddScoped<IClientRepository, ClientRepository>();
+
 
 var app = builder.Build();
 
@@ -107,7 +83,18 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    var context = services.GetRequiredService<AppDbContext>();
+    var userManager = services.GetRequiredService<UserManager<User>>();
+    var identityManager = services.GetRequiredService<RoleManager<Role>>();
 
+    // Seed Identity Users via UserManager
+    await DbSeedData.SeedUsersAsync(context, userManager, identityManager);
+}
+
+app.UseMiddleware<TenantMiddleware>();
 app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();

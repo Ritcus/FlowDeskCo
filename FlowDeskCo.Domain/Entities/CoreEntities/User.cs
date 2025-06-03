@@ -17,10 +17,10 @@ namespace RestateCo.Domain.Entities.CoreEntities
 
     public class User : IdentityUser<Guid>
     {
-        public string FullName { get; set; } = null!;
+        public string? FullName { get; set; } = null!;
         public Guid? ClientId { get; set; }
         public Client? Client { get; set; }
-        public Guid RoleId { get; set; }
+        public Guid? RoleId { get; set; }
         public Role? Role { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }

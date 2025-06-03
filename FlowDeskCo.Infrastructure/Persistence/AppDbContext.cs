@@ -1,12 +1,15 @@
 ﻿using FlowDeskCo.Application.Interfaces;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using RestateCo.Domain.Entities.CoreEntities;
 using RestateCo.Domain.Entities.CustomEntities;
+using System;
 
 namespace FlowDeskCo.Infrastructure.Persistence
 {
-    public class AppDbContext : DbContext
+    public class AppDbContext : IdentityDbContext<User, Role, Guid>
     {
         private readonly IHostEnvironment _env;
         private readonly ITenantProvider _tenantProvider;
@@ -36,6 +39,7 @@ namespace FlowDeskCo.Infrastructure.Persistence
             // Configure User entity example:
             modelBuilder.Entity<User>(entity =>
             {
+                entity.HasOne(x => x.Role).WithMany().HasForeignKey(u => u.RoleId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasQueryFilter(u => u.ClientId == _tenantProvider.GetTenantId());
                 entity.Property(u => u.IsActive).HasDefaultValue(true);
                 entity.Property(u => u.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
@@ -77,6 +81,48 @@ namespace FlowDeskCo.Infrastructure.Persistence
                 .WithOne()
                 .HasForeignKey(f => f.CustomEntityDefinitionId);
         }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        =>
+            optionsBuilder.UseSqlServer(@"Server=(localdb)\MSSQLLocalDB;Database=FlowDeskCo;Trusted_Connection=True;MultipleActiveResultSets=true;ConnectRetryCount=0").UseSeeding((context, _) =>
+            {
+                context.ChangeTracker.Clear();
+                try { 
+                // Seed Clients
+                foreach (var client in DbSeedData.clients)
+                {
+                    if (!context.Set<Client>().Any(r => r.Id == client.Id))
+                    {
+                        context.Set<Client>().Add(client);
+                    }
+                }
+
+
+                        // Seed Documents
+                        foreach (var doc in DbSeedData.documents)
+                {
+                    if (context.Set<Document>().FirstOrDefault(r => r.Id == doc.Id) == null)
+                    {
+                        context.Set<Document>().Add(doc);
+                    }
+                }
+
+                // Seed SharedLinks
+                foreach (var link in DbSeedData.sharedLinks)
+                {
+                    if (!context.Set<SharedLink>().Any(r => r.Id == link.Id))
+                    {
+                        context.Set<SharedLink>().Add(link);
+                    }
+                }
+                context.SaveChanges();
+                }
+                catch
+                {
+                    throw;
+                }
+            });
+      
 
     }
 }

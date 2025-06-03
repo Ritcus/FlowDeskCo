@@ -20,8 +20,12 @@ namespace FlowDeskCo.Infrastructure.Services
 
         public Guid GetTenantId()
         {
-            var clientIdClaim = _httpContextAccessor.HttpContext?.User.FindFirst("client_id")?.Value;
-            return string.IsNullOrEmpty(clientIdClaim) ? Guid.Empty : Guid.Parse(clientIdClaim);
+            if(_httpContextAccessor.HttpContext?.Items["ClientId"] is Guid clientId)
+        {
+                return clientId;
+            }
+
+            return Guid.Empty;
         }
     }
 }
