@@ -1,10 +1,13 @@
 using FlowDeskCo.Application.Interfaces;
 using FlowDeskCo.Application.Middlerwares;
+using FlowDeskCo.Application.Services;
 using FlowDeskCo.Infrastructure.Persistence;
 using FlowDeskCo.Infrastructure.Repositories;
 using FlowDeskCo.Infrastructure.Services;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -15,29 +18,61 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
-// Register Repositories
+
+//Services
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
-//builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IClientRepository, ClientRepository>();
+builder.Services.AddScoped<ICustomEntityService, CustomEntityService>();
+builder.Services.AddScoped<ICustomEntityRepository, CustomEntityRepository>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantProvider, TenantProvider>();
+builder.Services.AddScoped<ITenantSettingsService, TenantSettingsService>();
 
-// Add services to the container.
+
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Your API", Version = "v1" });
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Your API",
+        Version = "v1"
+    });
 
-    // If you added JWT authentication, tell Swagger how to send the token
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        In = ParameterLocation.Header,
-        Description = "Please enter a valid token",
+        Description = "JWT Authorization header using the Bearer scheme. Example: 'Bearer {token}'",
         Name = "Authorization",
+        In = ParameterLocation.Header,
         Type = SecuritySchemeType.Http,
-        BearerFormat = "JWT",
-        Scheme = "bearer"
+        Scheme = "bearer",
+        BearerFormat = "JWT"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
+
+//CROS Configuration
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("CorsPolicy", policy =>
+    {
+        policy.WithOrigins(allowedOrigins!)
+        .AllowCredentials()
+        .AllowAnyHeader()
+        .AllowAnyMethod();
     });
 });
 
@@ -48,31 +83,51 @@ builder.Services.AddDbContext<AppDbContext>((sp, options) => {
     });
 
 
+//API Rate Limiter
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("ApiLimit", opt =>
+    {
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.PermitLimit = 100;
+        opt.QueueLimit = 10;
+    });
+});
+
 //Authentication Middleware
 builder.Services.AddIdentity<User,Role>()
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
-builder.Services.AddAuthentication(opt =>
-{
-    opt.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    opt.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-}).AddJwtBearer(options =>
-{
-    var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-    options.TokenValidationParameters = new TokenValidationParameters
+
+builder.Services.AddAuthentication("MyCookieAuth")
+    .AddCookie("MyCookieAuth", options =>
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSettings["Issuer"],
-        ValidAudience = jwtSettings["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]))
-    };
-});
+        options.Cookie.Name = "MyAuthCookie";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.LoginPath = "/api/auth/login";
+        options.AccessDeniedPath = "/api/auth/access-denied";
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
+        options.SlidingExpiration = true;
+
+        options.Events = new CookieAuthenticationEvents
+        {
+            OnRedirectToLogin = context =>
+            {
+                if (context.Request.Path.StartsWithSegments("/api"))
+                {
+                    context.Response.StatusCode = 401;
+                    return Task.CompletedTask;
+                }
+                context.Response.Redirect(context.RedirectUri);
+                return Task.CompletedTask;
+            }
+        };
+    });
+
+builder.Services.AddAuthorization();
 
 builder.Services.AddScoped<JwtTokenService>();
-builder.Services.AddScoped<IClientRepository, ClientRepository>();
 
 
 var app = builder.Build();
@@ -83,20 +138,25 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+app.UseMiddleware<TenantMiddleware>();
+
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     var context = services.GetRequiredService<AppDbContext>();
+
     var userManager = services.GetRequiredService<UserManager<User>>();
     var identityManager = services.GetRequiredService<RoleManager<Role>>();
 
     // Seed Identity Users via UserManager
-    await DbSeedData.SeedUsersAsync(context, userManager, identityManager);
+    await DbSeedData.SeedUsersAsync(context,userManager, identityManager);
 }
-
+app.UseCors("CorsPolicy");
 app.UseMiddleware<TenantMiddleware>();
 app.UseHttpsRedirection();
+app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 
 app.Run();

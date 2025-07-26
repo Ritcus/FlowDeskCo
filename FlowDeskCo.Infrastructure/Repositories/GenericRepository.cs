@@ -1,6 +1,8 @@
 ﻿using FlowDeskCo.Application.Interfaces;
 using FlowDeskCo.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using RestateCo.Domain.Entities.CustomEntities;
+using System.Linq.Expressions;
 
 namespace FlowDeskCo.Infrastructure.Repositories
 {
@@ -26,9 +28,14 @@ namespace FlowDeskCo.Infrastructure.Repositories
             await _context.SaveChangesAsync();
         }
 
-        public async Task<IEnumerable<T>> GetAllAsync()
+        public async Task<IEnumerable<T>> GetAllAsync(Expression<Func<T, bool>>? predicate = null)
         {
-            return await _dbSet.ToListAsync();
+            IQueryable<T> query = _dbSet;
+
+            if (predicate != null)
+                query = query.Where(predicate);
+
+            return await query.ToListAsync();
         }
 
         public async Task<T> GetByIdAsync(Guid id)
@@ -41,5 +48,6 @@ namespace FlowDeskCo.Infrastructure.Repositories
             _dbSet.Update(entity);
             await _context.SaveChangesAsync();
         }
+
     }
 }

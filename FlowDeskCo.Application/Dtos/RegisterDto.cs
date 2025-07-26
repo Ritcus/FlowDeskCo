@@ -9,10 +9,9 @@ namespace FlowDeskCo.Application.Dtos
     public class RegisterDto
     {
         public string FullName { get; set; } = null!;
-        public string UserName { get; set; } = null!;
+        public string Username { get; set; } = null!;
         public string Email { get; set; } = null!;
-        public string PhoneNumber { get; set; } = null!;
-        public Guid? ClientId { get; set; }
+        public string Phone { get; set; } = null!;
         public string Password { get; set; } = null!;
     }
 }
